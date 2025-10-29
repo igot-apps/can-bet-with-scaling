@@ -1,5 +1,3 @@
-
-
 <!doctype html>
 <html lang="en">
 <head>
@@ -113,6 +111,7 @@
                 <button id="winBtn" class="flex-1 px-4 py-2 rounded bg-emerald-600 text-white">WIN</button>
                 <button id="lossBtn" class="flex-1 px-4 py-2 rounded bg-rose-600 text-white">LOSS</button>
                 <button id="resetCycleBtn" class="px-3 py-2 rounded border">Reset Cycle</button>
+                <button id="undoBtn" class="px-3 py-2 rounded border bg-gray-100" disabled>↩️ Undo</button>
               </div>
             </div>
 
@@ -155,6 +154,17 @@
             <div class="text-xs muted">Step: <span id="compoundingStepDisplay">10</span>% increase</div>
           </div>
 
+          <!-- Undo History Info -->
+          <div class="mt-4 p-3 rounded-lg bg-purple-50 border border-purple-200">
+            <div class="text-sm font-medium text-purple-800 mb-2">Undo History</div>
+            <div class="text-xs text-purple-700">
+              Last action: <span id="lastActionDisplay">None</span>
+            </div>
+            <div class="text-xs text-purple-600 mt-1">
+              Can undo: <span id="undoCount">0</span> actions
+            </div>
+          </div>
+
           <!-- Data Management -->
           <div class="mt-4 space-y-2">
             <button id="exportDataBtn" class="w-full px-3 py-2 rounded bg-green-600 text-white text-sm">📤 Export App Data</button>
@@ -164,7 +174,7 @@
         </aside>
       </main>
 
-      <footer class="mt-6 text-xs muted">Tip: Use Settings to customize starting balance, base unit, RR and per-trade risk limit. The app blocks trades when they are too risky — use Reset Cycle to log and start a new cycle.</footer>
+      <footer class="mt-6 text-xs muted">Tip: Use Settings to customize starting balance, base unit, RR and per-trade risk limit. The app blocks trades when they are too risky — use Reset Cycle to log and start a new cycle. Use Undo to revert your last action.</footer>
     </div>
   </div>
 
@@ -272,6 +282,15 @@
             </label>
             <div class="text-xs muted mt-1">Base unit increases when balance grows by threshold percentage</div>
           </div>
+
+          <!-- Undo Settings -->
+          <div class="border-t pt-3 mt-2">
+            <div class="text-sm font-medium mb-2">Undo Settings</div>
+            <label class="text-sm">Max Undo History Size
+              <input id="s_maxUndoHistory" type="number" step="1" min="1" max="50" class="w-full mt-1 p-2 border rounded" />
+            </label>
+            <div class="text-xs muted mt-1">Maximum number of actions that can be undone</div>
+          </div>
         </div>
 
         <div class="mt-4 flex justify-between gap-2">
@@ -358,6 +377,7 @@
   // -------------------------
   const LS_KEY = 'cancelTrainer_final_v3';
   const LS_CYCLES = 'cancelTrainer_cycles_final_v3';
+  const LS_UNDO_HISTORY = 'cancelTrainer_undo_history_v1';
 
   const defaults = {
     balance: 50.0,
@@ -378,13 +398,16 @@
       entryPrice: '',
       stopLossPrice: '',
       rrRatio: 1.5
-    }
+    },
+    // Undo settings
+    maxUndoHistory: 10
   };
 
   // Load state
   let saved = JSON.parse(localStorage.getItem(LS_KEY));
   let state = saved ? {...defaults, ...saved} : {...defaults};
   let cycles = JSON.parse(localStorage.getItem(LS_CYCLES)) || [];
+  let undoHistory = JSON.parse(localStorage.getItem(LS_UNDO_HISTORY)) || [];
 
   // track cycle start balance (so reset logs exact start)
   state.cycleStartBalance = state.cycleStartBalance ?? state.balance;
@@ -395,6 +418,9 @@
 
   // Initialize position calculator settings if not present
   state.positionCalcSettings = state.positionCalcSettings ?? defaults.positionCalcSettings;
+
+  // Initialize undo settings if not present
+  state.maxUndoHistory = state.maxUndoHistory ?? defaults.maxUndoHistory;
 
   // make maxCycleDrawdown = 3x per-trade allowed risk
   Object.defineProperty(state, 'maxCycleDrawdown', { 
@@ -435,6 +461,89 @@
   function blockedCheck(){ 
     const r = nextRisk(); 
     return (r > perTradeCap()) || ((state.cycleLoss + r) > state.maxCycleDrawdown) || (r > state.balance); 
+  }
+
+  // Undo functionality
+  function saveStateForUndo(actionType, description) {
+    const undoState = {
+      timestamp: new Date().toISOString(),
+      actionType: actionType,
+      description: description,
+      state: {
+        balance: state.balance,
+        baseUnit: state.baseUnit,
+        sequence: [...state.sequence],
+        tradeCount: state.tradeCount,
+        cycleLoss: state.cycleLoss,
+        cycleStartBalance: state.cycleStartBalance,
+        history: [...state.history],
+        lastCompoundingBalance: state.lastCompoundingBalance,
+        message: state.message
+      }
+    };
+    
+    // Add to undo history (most recent first)
+    undoHistory.unshift(undoState);
+    
+    // Limit undo history size
+    if (undoHistory.length > state.maxUndoHistory) {
+      undoHistory = undoHistory.slice(0, state.maxUndoHistory);
+    }
+    
+    saveUndoHistory();
+    updateUndoUI();
+  }
+
+  function undoLastAction() {
+    if (undoHistory.length === 0) return false;
+    
+    const lastState = undoHistory.shift();
+    
+    // Restore state
+    state.balance = lastState.state.balance;
+    state.baseUnit = lastState.state.baseUnit;
+    state.sequence = [...lastState.state.sequence];
+    state.tradeCount = lastState.state.tradeCount;
+    state.cycleLoss = lastState.state.cycleLoss;
+    state.cycleStartBalance = lastState.state.cycleStartBalance;
+    state.history = [...lastState.state.history];
+    state.lastCompoundingBalance = lastState.state.lastCompoundingBalance;
+    state.message = `Undid: ${lastState.description}`;
+    
+    saveState();
+    saveUndoHistory();
+    updateUI();
+    updateUndoUI();
+    
+    return true;
+  }
+
+  function saveUndoHistory() {
+    localStorage.setItem(LS_UNDO_HISTORY, JSON.stringify(undoHistory));
+  }
+
+  function updateUndoUI() {
+    const undoBtn = document.getElementById('undoBtn');
+    const lastActionDisplay = document.getElementById('lastActionDisplay');
+    const undoCount = document.getElementById('undoCount');
+    
+    if (undoHistory.length > 0) {
+      undoBtn.disabled = false;
+      undoBtn.className = 'px-3 py-2 rounded border bg-blue-100 text-blue-700 hover:bg-blue-200';
+      lastActionDisplay.textContent = undoHistory[0].description;
+    } else {
+      undoBtn.disabled = true;
+      undoBtn.className = 'px-3 py-2 rounded border bg-gray-100 text-gray-400 cursor-not-allowed';
+      lastActionDisplay.textContent = 'None';
+    }
+    
+    undoCount.textContent = undoHistory.length;
+  }
+
+  function clearUndoHistory() {
+    undoHistory = [];
+    saveUndoHistory();
+    updateUndoUI();
   }
 
   // Position Calculator Functions
@@ -638,9 +747,11 @@
         compoundingStep: state.compoundingStep,
         originalBaseUnit: state.originalBaseUnit,
         lastCompoundingBalance: state.lastCompoundingBalance,
-        positionCalcSettings: state.positionCalcSettings
+        positionCalcSettings: state.positionCalcSettings,
+        maxUndoHistory: state.maxUndoHistory
       },
-      cycles: cycles
+      cycles: cycles,
+      undoHistory: undoHistory
     };
     
     const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(appData, null, 2));
@@ -670,10 +781,12 @@
       // Replace current state and cycles
       state = { ...defaults, ...data.state };
       cycles = data.cycles || [];
+      undoHistory = data.undoHistory || [];
       
       // Save to localStorage
       saveState();
       saveCycles();
+      saveUndoHistory();
       
       return true;
     } catch (error) {
@@ -700,7 +813,9 @@
       originalBaseUnit: state.originalBaseUnit,
       lastCompoundingBalance: state.lastCompoundingBalance,
       // Position calculator settings
-      positionCalcSettings: state.positionCalcSettings
+      positionCalcSettings: state.positionCalcSettings,
+      // Undo settings
+      maxUndoHistory: state.maxUndoHistory
     })); 
   }
   
@@ -809,6 +924,9 @@
   // Position calculator defaults
   state.positionCalcSettings = state.positionCalcSettings ?? defaults.positionCalcSettings;
 
+  // Undo settings defaults
+  state.maxUndoHistory = state.maxUndoHistory ?? defaults.maxUndoHistory;
+
   // File handling variables
   let selectedFile = null;
 
@@ -829,10 +947,19 @@
 
   document.getElementById('pc_clear').addEventListener('click', clearPositionCalc);
 
+  // Undo button
+  document.getElementById('undoBtn').addEventListener('click', () => {
+    undoLastAction();
+  });
+
   // Actions: WIN
   document.getElementById('winBtn').addEventListener('click', () => {
     const r = nextRisk(); if(r <= 0) return;
     const rw = nextReward();
+    
+    // Save state for undo before making changes
+    saveStateForUndo('WIN', `WIN trade +$${rw.toFixed(4)}`);
+    
     state.balance = +(state.balance + rw).toFixed(4);
     state.message = `WIN +$${rw.toFixed(4)}`;
     
@@ -877,6 +1004,10 @@
   // Actions: LOSS
   document.getElementById('lossBtn').addEventListener('click', () => {
     const r = nextRisk(); if(r <= 0) return;
+    
+    // Save state for undo before making changes
+    saveStateForUndo('LOSS', `LOSS trade -$${r.toFixed(4)}`);
+    
     state.balance = +(state.balance - r).toFixed(4);
     state.cycleLoss = +(state.cycleLoss + r).toFixed(4);
     state.tradeCount += 1;
@@ -896,6 +1027,9 @@
 
   // Reset Cycle (manual or when blocked)
   document.getElementById('resetCycleBtn').addEventListener('click', () => {
+    // Save state for undo before making changes
+    saveStateForUndo('RESET_CYCLE', 'Reset trading cycle');
+    
     // create a safe, complete cycle record using tracked cycleStartBalance
     const startBal = +(state.cycleStartBalance ?? state.balance).toFixed(4);
     const endBal = +(state.balance ?? 0).toFixed(4);
@@ -1039,12 +1173,18 @@
     document.getElementById('s_compoundingThreshold').value = state.compoundingThreshold ?? defaults.compoundingThreshold;
     document.getElementById('s_compoundingStep').value = state.compoundingStep ?? defaults.compoundingStep;
     
+    // Undo settings
+    document.getElementById('s_maxUndoHistory').value = state.maxUndoHistory ?? defaults.maxUndoHistory;
+    
     settingsModal.classList.remove('hidden'); settingsModal.classList.add('flex');
   });
   
   document.getElementById('s_cancel').addEventListener('click', () => { settingsModal.classList.add('hidden'); settingsModal.classList.remove('flex'); });
   
   document.getElementById('s_save').addEventListener('click', () => {
+    // Save state for undo before making changes
+    saveStateForUndo('SETTINGS_CHANGE', 'Changed app settings');
+    
     // apply settings (user intends to change current working values)
     const sb = parseFloat(document.getElementById('s_balance').value) || state.balance;
     const bu = parseFloat(document.getElementById('s_baseUnit').value) || state.baseUnit;
@@ -1057,6 +1197,9 @@
     const ct = parseFloat(document.getElementById('s_compoundingThreshold').value) || defaults.compoundingThreshold;
     const cs = parseFloat(document.getElementById('s_compoundingStep').value) || defaults.compoundingStep;
     
+    // Undo settings
+    const maxUndo = parseInt(document.getElementById('s_maxUndoHistory').value) || defaults.maxUndoHistory;
+    
     state.balance = +sb.toFixed(4);
     state.baseUnit = +bu.toFixed(4);
     state.rr = +rr;
@@ -1068,6 +1211,9 @@
     state.compoundingStep = +cs;
     state.originalBaseUnit = state.baseUnit; // Reset original when user changes base unit
     state.lastCompoundingBalance = state.balance; // Reset compounding tracking
+    
+    // Update undo settings
+    state.maxUndoHistory = maxUndo;
     
     // reset cycle counters when user updates settings (safer)
     state.cycleLoss = 0; state.tradeCount = 0; state.history = [];
@@ -1082,6 +1228,7 @@
     if(confirm('⚠️ Are you sure you want to reset the entire app? This will delete all saved history and settings.')) {
       localStorage.removeItem(LS_KEY);
       localStorage.removeItem(LS_CYCLES);
+      localStorage.removeItem(LS_UNDO_HISTORY);
       location.reload();
     }
   });
@@ -1127,6 +1274,7 @@
 
   // initial UI build
   updateUI();
+  updateUndoUI();
 </script>
 
 </body>
