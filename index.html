@@ -29,7 +29,7 @@
 
         <div class="flex gap-2">
           <button id="positionCalcBtn" class="px-3 py-2 border rounded text-sm">📊 Position Calculator</button>
-          <button id="historyBtn" class="px-3 py-2 border rounded text-sm">📜 Cycle History</button>
+          <button id="historyBtn" class="px-3 py-2 border rounded text-sm">📜 Trade History</button>
           <button id="settingsBtn" class="px-3 py-2 border rounded text-sm">⚙️ Settings</button>
         </div>
       </header>
@@ -44,8 +44,8 @@
                 <div class="text-xl mono" id="balance">$50.0000</div>
               </div>
               <div>
-                <div class="text-sm muted">Cycle Loss / Max</div>
-                <div class="text-xl mono"><span id="cycleLoss">$0.0000</span> / <span id="maxDD">$3.0000</span></div>
+                <div class="text-sm muted">Total Loss</div>
+                <div class="text-xl mono"><span id="cycleLoss">$0.0000</span></div>
               </div>
             </div>
 
@@ -119,7 +119,6 @@
               <div class="mt-4 flex gap-3">
                 <button id="winBtn" class="flex-1 px-4 py-2 rounded bg-emerald-600 text-white">WIN</button>
                 <button id="lossBtn" class="flex-1 px-4 py-2 rounded bg-rose-600 text-white">LOSS</button>
-                <button id="resetCycleBtn" class="px-3 py-2 rounded border">Reset Cycle</button>
                 <button id="undoBtn" class="px-3 py-2 rounded border bg-gray-100" disabled>↩️ Undo</button>
               </div>
             </div>
@@ -183,7 +182,7 @@
         </aside>
       </main>
 
-      <footer class="mt-6 text-xs muted">Tip: Use Settings to customize starting balance, base unit, RR and per-trade risk limit. The app blocks trades when they are too risky — use Reset Cycle to log and start a new cycle. Use Undo to revert your last action.</footer>
+      <footer class="mt-6 text-xs muted">Tip: Use Settings to customize starting balance, base unit, RR and per-trade risk limit. The app blocks trades when they are too risky. Use Undo to revert your last action.</footer>
     </div>
   </div>
 
@@ -322,8 +321,8 @@
     <div class="modal-backdrop absolute inset-0"></div>
     <div class="relative max-w-3xl w-full max-h-[90vh] overflow-hidden">
       <div class="bg-white rounded-2xl p-6 z-10 shadow-lg modal-container">
-        <h2 class="text-lg font-semibold mb-3">Cycle History</h2>
-        <div class="mb-3 text-sm muted">Each cycle is saved automatically when completed or when you reset a blocked cycle. Use ❌ to remove an entry.</div>
+        <h2 class="text-lg font-semibold mb-3">Trade History</h2>
+        <div class="mb-3 text-sm muted">Your complete trading history in one continuous session.</div>
         <div id="historyTable" class="text-sm"></div>
 
         <div class="mt-4 flex justify-between">
@@ -364,8 +363,8 @@
             <strong>Warning:</strong> This will replace ALL current app data including:
             <ul class="list-disc list-inside mt-1 ml-2">
               <li>Current balance and trading state</li>
-              <li>All cycle history</li>
-              <li>Trade history and settings</li>
+              <li>All trade history</li>
+              <li>Settings</li>
             </ul>
           </div>
         </div>
@@ -384,8 +383,7 @@
   // -------------------------
   // Keys & defaults
   // -------------------------
-  const LS_KEY = 'cancelTrainer_final_v3';
-  const LS_CYCLES = 'cancelTrainer_cycles_final_v3';
+  const LS_KEY = 'cancelTrainer_one_cycle_v1';
   const LS_UNDO_HISTORY = 'cancelTrainer_undo_history_v1';
 
   const defaults = {
@@ -395,7 +393,7 @@
     maxRiskPct: 20,
     sequence: [1,1,2],
     tradeCount: 0,
-    cycleLoss: 0,
+    totalLoss: 0,
     history: [],
     // Compounding settings
     compoundingThreshold: 10,  // % growth needed to trigger compounding
@@ -415,11 +413,7 @@
   // Load state
   let saved = JSON.parse(localStorage.getItem(LS_KEY));
   let state = saved ? {...defaults, ...saved} : {...defaults};
-  let cycles = JSON.parse(localStorage.getItem(LS_CYCLES)) || [];
   let undoHistory = JSON.parse(localStorage.getItem(LS_UNDO_HISTORY)) || [];
-
-  // track cycle start balance (so reset logs exact start)
-  state.cycleStartBalance = state.cycleStartBalance ?? state.balance;
 
   // Initialize compounding tracking if not present
   state.originalBaseUnit = state.originalBaseUnit ?? state.baseUnit;
@@ -431,10 +425,10 @@
   // Initialize undo settings if not present
   state.maxUndoHistory = state.maxUndoHistory ?? defaults.maxUndoHistory;
 
-  // make maxCycleDrawdown = 3x per-trade allowed risk
-  Object.defineProperty(state, 'maxCycleDrawdown', { 
+  // Calculate max risk per trade
+  Object.defineProperty(state, 'maxRiskPerTrade', { 
     get: function(){ 
-      return +(state.balance * (state.maxRiskPct/100) * 3).toFixed(4); 
+      return +(state.balance * (state.maxRiskPct/100)).toFixed(4); 
     }, 
     configurable: true 
   });
@@ -463,13 +457,9 @@
     return +(nextRisk() * state.rr).toFixed(4); 
   }
   
-  function perTradeCap(){ 
-    return +(state.balance * (state.maxRiskPct/100)).toFixed(4); 
-  }
-  
   function blockedCheck(){ 
     const r = nextRisk(); 
-    return (r > perTradeCap()) || ((state.cycleLoss + r) > state.maxCycleDrawdown) || (r > state.balance); 
+    return (r > state.maxRiskPerTrade) || (r > state.balance); 
   }
 
   // Undo functionality
@@ -483,8 +473,7 @@
         baseUnit: state.baseUnit,
         sequence: [...state.sequence],
         tradeCount: state.tradeCount,
-        cycleLoss: state.cycleLoss,
-        cycleStartBalance: state.cycleStartBalance,
+        totalLoss: state.totalLoss,
         history: [...state.history],
         lastCompoundingBalance: state.lastCompoundingBalance,
         message: state.message
@@ -513,8 +502,7 @@
     state.baseUnit = lastState.state.baseUnit;
     state.sequence = [...lastState.state.sequence];
     state.tradeCount = lastState.state.tradeCount;
-    state.cycleLoss = lastState.state.cycleLoss;
-    state.cycleStartBalance = lastState.state.cycleStartBalance;
+    state.totalLoss = lastState.state.totalLoss;
     state.history = [...lastState.state.history];
     state.lastCompoundingBalance = lastState.state.lastCompoundingBalance;
     state.message = `Undid: ${lastState.description}`;
@@ -746,7 +734,7 @@
   // Export app data function
   function exportAppData() {
     const appData = {
-      version: '3.0',
+      version: '1.0',
       exportDate: new Date().toISOString(),
       state: {
         balance: state.balance,
@@ -755,8 +743,7 @@
         maxRiskPct: state.maxRiskPct,
         sequence: state.sequence,
         tradeCount: state.tradeCount,
-        cycleLoss: state.cycleLoss,
-        cycleStartBalance: state.cycleStartBalance,
+        totalLoss: state.totalLoss,
         history: state.history,
         compoundingThreshold: state.compoundingThreshold,
         compoundingStep: state.compoundingStep,
@@ -765,7 +752,6 @@
         positionCalcSettings: state.positionCalcSettings,
         maxUndoHistory: state.maxUndoHistory
       },
-      cycles: cycles,
       undoHistory: undoHistory
     };
     
@@ -781,8 +767,8 @@
     try {
       const data = JSON.parse(jsonData);
       
-      if (!data.state || !data.cycles) {
-        throw new Error('Invalid data format: missing state or cycles');
+      if (!data.state) {
+        throw new Error('Invalid data format: missing state');
       }
       
       // Validate required fields
@@ -793,14 +779,12 @@
         }
       }
       
-      // Replace current state and cycles
+      // Replace current state
       state = { ...defaults, ...data.state };
-      cycles = data.cycles || [];
       undoHistory = data.undoHistory || [];
       
       // Save to localStorage
       saveState();
-      saveCycles();
       saveUndoHistory();
       
       return true;
@@ -819,8 +803,7 @@
       maxRiskPct: state.maxRiskPct,
       sequence: state.sequence,
       tradeCount: state.tradeCount,
-      cycleLoss: state.cycleLoss,
-      cycleStartBalance: state.cycleStartBalance,
+      totalLoss: state.totalLoss,
       history: state.history,
       // Compounding settings
       compoundingThreshold: state.compoundingThreshold,
@@ -833,16 +816,11 @@
       maxUndoHistory: state.maxUndoHistory
     })); 
   }
-  
-  function saveCycles(){ 
-    localStorage.setItem(LS_CYCLES, JSON.stringify(cycles)); 
-  }
 
   // UI update
   function updateUI(){
     document.getElementById('balance').textContent = (state.balance ?? 0).toFixed(4);
-    document.getElementById('cycleLoss').textContent = (state.cycleLoss ?? 0).toFixed(4);
-    document.getElementById('maxDD').textContent = state.maxCycleDrawdown.toFixed(4);
+    document.getElementById('cycleLoss').textContent = (state.totalLoss ?? 0).toFixed(4);
     document.getElementById('sequence').textContent = state.sequence && state.sequence.length ? state.sequence.join(' - ') : '(empty — completed)';
     document.getElementById('units').textContent = seqSumEnds(state.sequence);
     document.getElementById('nextRisk').textContent = '$' + nextRisk().toFixed(4);
@@ -900,12 +878,12 @@
     const winBtn = document.getElementById('winBtn');
     const lossBtn = document.getElementById('lossBtn');
     const r = nextRisk();
-    const cap = perTradeCap();
+    const cap = state.maxRiskPerTrade;
     const blocked = blockedCheck();
 
     if(blocked){
-      status.textContent = `⚠️ Trade Blocked: Next risk $${r.toFixed(4)} exceeds allowed per-trade cap $${cap.toFixed(4)} or cycle limit.`;
-      advice.textContent = 'Action: Reset Cycle (recommended) or adjust Settings. WIN/LOSS disabled.';
+      status.textContent = `⚠️ Trade Blocked: Next risk $${r.toFixed(4)} exceeds allowed per-trade cap $${cap.toFixed(4)}.`;
+      advice.textContent = 'Action: Adjust Settings or wait for balance to grow. WIN/LOSS disabled.';
       winBtn.disabled = true; lossBtn.disabled = true;
       winBtn.className = 'flex-1 px-4 py-2 rounded bg-emerald-200 text-emerald-800 cursor-not-allowed';
       lossBtn.className = 'flex-1 px-4 py-2 rounded bg-rose-200 text-rose-800 cursor-not-allowed';
@@ -917,7 +895,7 @@
       lossBtn.className = 'flex-1 px-4 py-2 rounded bg-rose-600 text-white';
     }
 
-    saveState(); saveCycles();
+    saveState();
   }
 
   // Startup normalize
@@ -926,9 +904,8 @@
   state.rr = state.rr ?? defaults.rr;
   state.maxRiskPct = state.maxRiskPct ?? defaults.maxRiskPct;
   state.tradeCount = state.tradeCount ?? 0;
-  state.cycleLoss = state.cycleLoss ?? 0;
+  state.totalLoss = state.totalLoss ?? 0;
   state.history = state.history || [];
-  state.cycleStartBalance = state.cycleStartBalance ?? state.balance;
   
   // Compounding defaults
   state.compoundingThreshold = state.compoundingThreshold ?? defaults.compoundingThreshold;
@@ -994,24 +971,11 @@
       seq: state.sequence.join('-')
     });
     
-    // if sequence cleared -> record completed cycle automatically
+    // if sequence cleared -> automatically restart sequence
     if(state.sequence.length === 0){
-      const cycle = {
-        startBalance: state.cycleStartBalance.toFixed ? state.cycleStartBalance.toFixed(4) : (+state.cycleStartBalance).toFixed(4),
-        endBalance: state.balance.toFixed(4),
-        trades: state.tradeCount,
-        result: (state.balance - state.cycleStartBalance).toFixed(4),
-        reason: 'Completed',
-        timestamp: new Date().toISOString(),
-        baseUnitAtEnd: state.baseUnit.toFixed(4) // Track base unit at cycle end
-      };
-      cycles.unshift(cycle); // auto-save
-      // reset cycle (keep balance)
       state.sequence = JSON.parse(JSON.stringify(defaults.sequence));
-      state.cycleLoss = 0;
-      state.tradeCount = 0;
-      state.history.unshift({type:'CYCLE_COMPLETE', info: cycle});
-      state.cycleStartBalance = state.balance; // new cycle starts at current balance
+      state.history.unshift({type:'SEQUENCE_RESTART', info: 'Sequence completed and restarted'});
+      state.message = 'Sequence completed! Restarting with initial sequence.';
     }
     updateUI();
   });
@@ -1024,7 +988,7 @@
     saveStateForUndo('LOSS', `LOSS trade -$${r.toFixed(4)}`);
     
     state.balance = +(state.balance - r).toFixed(4);
-    state.cycleLoss = +(state.cycleLoss + r).toFixed(4);
+    state.totalLoss = +(state.totalLoss + r).toFixed(4);
     state.tradeCount += 1;
     const units = seqSumEnds(state.sequence) || 1;
     state.sequence.push(units);
@@ -1035,36 +999,7 @@
       balance: state.balance.toFixed(4),
       seq: state.sequence.join('-')
     });
-    state.message = `LOSS -$${r.toFixed(4)} (Cycle loss $${state.cycleLoss.toFixed(4)})`;
-    if(state.cycleLoss >= state.maxCycleDrawdown) state.message += ' • Cycle drawdown limit reached.';
-    updateUI();
-  });
-
-  // Reset Cycle (manual or when blocked)
-  document.getElementById('resetCycleBtn').addEventListener('click', () => {
-    // Save state for undo before making changes
-    saveStateForUndo('RESET_CYCLE', 'Reset trading cycle');
-    
-    // create a safe, complete cycle record using tracked cycleStartBalance
-    const startBal = +(state.cycleStartBalance ?? state.balance).toFixed(4);
-    const endBal = +(state.balance ?? 0).toFixed(4);
-    const cycle = {
-      startBalance: startBal.toFixed ? startBal.toFixed(4) : (+startBal).toFixed(4),
-      endBalance: endBal.toFixed ? endBal.toFixed(4) : (+endBal).toFixed(4),
-      trades: state.tradeCount,
-      result: (endBal - startBal).toFixed(4),
-      reason: 'Reset - Manual/Blocked',
-      timestamp: new Date().toISOString(),
-      baseUnitAtEnd: state.baseUnit.toFixed(4) // Track base unit at cycle end
-    };
-    cycles.unshift(cycle); // auto-save
-    // reset counters but keep balance
-    state.sequence = JSON.parse(JSON.stringify(defaults.sequence));
-    state.cycleLoss = 0;
-    state.tradeCount = 0;
-    state.history.unshift({type:'CYCLE_RESET', info: cycle, risk: (nextRisk()).toFixed(4), reward: '-', balance: state.balance.toFixed(4), seq: state.sequence.join('-')});
-    state.message = 'Cycle reset and logged to history.';
-    state.cycleStartBalance = state.balance; // start new cycle here
+    state.message = `LOSS -$${r.toFixed(4)} (Total loss $${state.totalLoss.toFixed(4)})`;
     updateUI();
   });
 
@@ -1230,9 +1165,8 @@
     // Update undo settings
     state.maxUndoHistory = maxUndo;
     
-    // reset cycle counters when user updates settings (safer)
-    state.cycleLoss = 0; state.tradeCount = 0; state.history = [];
-    state.cycleStartBalance = state.balance;
+    // reset counters when user updates settings
+    state.totalLoss = 0; state.tradeCount = 0; state.history = [];
     state.message = 'Settings saved.';
     settingsModal.classList.add('hidden'); settingsModal.classList.remove('flex');
     updateUI();
@@ -1242,7 +1176,6 @@
   document.getElementById('fullResetBtn').addEventListener('click', () => {
     if(confirm('⚠️ Are you sure you want to reset the entire app? This will delete all saved history and settings.')) {
       localStorage.removeItem(LS_KEY);
-      localStorage.removeItem(LS_CYCLES);
       localStorage.removeItem(LS_UNDO_HISTORY);
       location.reload();
     }
@@ -1256,35 +1189,32 @@
   });
   document.getElementById('closeHistory').addEventListener('click', () => { historyModal.classList.add('hidden'); historyModal.classList.remove('flex'); });
   document.getElementById('clearHistory').addEventListener('click', () => {
-    if(confirm('Clear all cycle history?')){ cycles = []; saveCycles(); renderHistoryTable(); }
+    if(confirm('Clear all trade history?')){ state.history = []; saveState(); renderHistoryTable(); }
   });
 
-  // Render history table with per-entry remove
+  // Render history table
   function renderHistoryTable(){
     const el = document.getElementById('historyTable');
-    if(!cycles.length){ el.innerHTML = '<div class="muted">No cycles logged yet.</div>'; return; }
-    const rows = cycles.map((c,i) => `
-      <div class="border-b py-2 flex items-start justify-between">
-        <div>
-          <div class="mono text-sm">#${i+1} • ${new Date(c.timestamp).toLocaleString()}</div>
-          <div class="text-xs muted">Start: $${c.startBalance} • End: $${c.endBalance} • Trades: ${c.trades} • Result: $${(+c.result).toFixed(4)} • Reason: ${c.reason}</div>
-          ${c.baseUnitAtEnd ? `<div class="text-xs text-blue-600">Final Base Unit: $${c.baseUnitAtEnd}</div>` : ''}
-        </div>
-        <div class="ml-4 text-right">
-          <button data-index="${i}" class="removeCycleBtn px-2 py-1 rounded bg-rose-100 text-rose-700">❌ Remove</button>
-        </div>
-      </div>
-    `).join('');
+    if(!state.history.length){ el.innerHTML = '<div class="muted">No trade history yet.</div>'; return; }
+    const rows = state.history.map((h,i) => {
+      if (h.type === 'COMPOUNDING') {
+        return `<div class="border-b py-2">
+          <div class="mono text-sm text-blue-700">${h.type}</div>
+          <div class="text-xs text-blue-600">${h.info} • Bal: $${h.balance} • ${new Date(h.timestamp).toLocaleString()}</div>
+        </div>`;
+      } else if (h.type === 'SEQUENCE_RESTART') {
+        return `<div class="border-b py-2">
+          <div class="mono text-sm text-green-700">${h.type}</div>
+          <div class="text-xs text-green-600">${h.info} • ${new Date().toLocaleString()}</div>
+        </div>`;
+      } else {
+        return `<div class="border-b py-2">
+          <div class="mono text-sm">${h.type}</div>
+          <div class="text-xs muted">Risk: $${h.risk} • Reward: ${h.reward !== '-' ? '$'+h.reward : '-'} • Bal: $${h.balance} • Seq: ${h.seq} • ${new Date(h.timestamp).toLocaleString()}</div>
+        </div>`;
+      }
+    }).join('');
     el.innerHTML = rows;
-    // attach listeners
-    Array.from(document.getElementsByClassName('removeCycleBtn')).forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const idx = parseInt(btn.getAttribute('data-index'));
-        if(confirm('Remove this cycle from history?')) {
-          cycles.splice(idx,1); saveCycles(); renderHistoryTable();
-        }
-      });
-    });
   }
 
   // initial UI build
