@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="en">
 <head>
@@ -98,6 +99,14 @@
                   <div>
                     <div class="text-green-700">Take Profit:</div>
                     <div class="mono text-green-900" id="positionTakeProfit">-</div>
+                  </div>
+                  <div>
+                    <div class="text-green-700">Risk Amount:</div>
+                    <div class="mono text-green-900" id="positionRiskAmount">-</div>
+                  </div>
+                  <div>
+                    <div class="text-green-700">Reward Amount:</div>
+                    <div class="mono text-green-900" id="positionRewardAmount">-</div>
                   </div>
                 </div>
                 <div class="mt-1 text-xs text-green-600" id="positionCalcStatus">
@@ -602,12 +611,14 @@
     document.getElementById('pc_takeProfit').textContent = takeProfit.toFixed(6);
     document.getElementById('pc_positionSize').textContent = roundedPositionSize.toFixed(4);
     document.getElementById('pc_stopDistance').textContent = stopDistance.toFixed(6);
-    document.getElementById('pc_rewardAmount').textContent = '$' + actualRewardAmount.toFixed(2);
+    document.getElementById('pc_rewardAmount').textContent = '$' + actualRewardAmount.toFixed(4);
     
     // Update main display with position info
     document.getElementById('positionQuantity').textContent = roundedPositionSize.toFixed(4);
     document.getElementById('positionTakeProfit').textContent = takeProfit.toFixed(6);
-    document.getElementById('positionCalcStatus').textContent = `Using risk: $${currentRisk.toFixed(4)}`;
+    document.getElementById('positionRiskAmount').textContent = '$' + currentRisk.toFixed(4);
+    document.getElementById('positionRewardAmount').textContent = '$' + actualRewardAmount.toFixed(4);
+    document.getElementById('positionCalcStatus').textContent = `Auto-calculated using risk: $${currentRisk.toFixed(4)}`;
     
     // Save current settings
     state.positionCalcSettings = {
@@ -660,6 +671,8 @@
         // Update main display
         document.getElementById('positionQuantity').textContent = roundedPositionSize.toFixed(4);
         document.getElementById('positionTakeProfit').textContent = takeProfit.toFixed(6);
+        document.getElementById('positionRiskAmount').textContent = '$' + currentRisk.toFixed(4);
+        document.getElementById('positionRewardAmount').textContent = '$' + actualRewardAmount.toFixed(4);
         document.getElementById('positionCalcStatus').textContent = `Auto-calculated using risk: $${currentRisk.toFixed(4)}`;
       }
     }
@@ -688,6 +701,8 @@
     // Clear main display
     document.getElementById('positionQuantity').textContent = '-';
     document.getElementById('positionTakeProfit').textContent = '-';
+    document.getElementById('positionRiskAmount').textContent = '-';
+    document.getElementById('positionRewardAmount').textContent = '-';
     document.getElementById('positionCalcStatus').textContent = 'Set up calculator to see position details';
     
     // Clear saved settings
