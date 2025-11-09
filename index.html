@@ -408,11 +408,11 @@
   const LS_UNDO_HISTORY = 'cancelTrainer_undo_history_v1';
 
   const defaults = {
-    balance: 50.0,
-    baseUnit: 0.04,
-    rr: 1.5,
-    maxRiskPct: 20,
-    sequence: [3],
+    balance: 150.0,
+    baseUnit: 0.01,
+    rr: 1.12,
+    maxRiskPct: 100,
+    sequence: [10],
     tradeCount: 0,
     totalLoss: 0,
     history: [],
@@ -425,7 +425,7 @@
     positionCalcSettings: {
       entryPrice: '',
       stopLossPrice: '',
-      rrRatio: 1.5
+      rrRatio: 1.12
     },
     // Undo settings
     maxUndoHistory: 10
