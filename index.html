@@ -49,6 +49,27 @@
               </div>
             </div>
 
+            <!-- Distance to Ruin Display -->
+            <div class="mt-4 p-3 rounded-lg bg-red-50 border border-red-200">
+              <div class="flex items-center justify-between mb-2">
+                <div class="text-sm font-medium text-red-800">Distance to Ruin</div>
+                <div class="text-xs text-red-600" id="ruinStatus">Active</div>
+              </div>
+              <div class="grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <div class="text-red-700">Consecutive Losses:</div>
+                  <div class="mono text-red-900" id="distanceToRuin">100</div>
+                </div>
+                <div>
+                  <div class="text-red-700">Risk of Ruin:</div>
+                  <div class="mono text-red-900" id="ruinPercentage">0.0%</div>
+                </div>
+              </div>
+              <div class="mt-2 text-xs text-red-600">
+                Number of consecutive losses that would wipe your account
+              </div>
+            </div>
+
             <!-- Compounding Status Display -->
             <div class="mt-4 p-3 rounded-lg bg-blue-50 border border-blue-200">
               <div class="flex items-center justify-between mb-2">
@@ -442,6 +463,73 @@
     configurable: true
   });
 
+  // Distance to Ruin Calculation
+  function calculateDistanceToRuin() {
+    let currentBalance = state.balance;
+    let currentSequence = [...state.sequence];
+    let consecutiveLosses = 0;
+    
+    // Simulate consecutive losses until account is wiped
+    while (currentBalance > 0) {
+      // Calculate next risk based on current sequence
+      const nextRiskAmount = calculateNextRisk(currentSequence);
+      
+      // If next risk exceeds remaining balance, we can't place the trade
+      if (nextRiskAmount > currentBalance) {
+        break;
+      }
+      
+      // Apply the loss
+      currentBalance -= nextRiskAmount;
+      consecutiveLosses++;
+      
+      // Update sequence for next trade (add loss to sequence)
+      const units = seqSumEnds(currentSequence) || 1;
+      currentSequence.push(units);
+    }
+    
+    return consecutiveLosses;
+  }
+
+  function calculateNextRisk(sequence) {
+    if (!Array.isArray(sequence) || sequence.length === 0) return 0;
+    const sumEnds = sequence.length === 1 ? sequence[0] * 2 : sequence[0] + sequence[sequence.length - 1];
+    return +(sumEnds * state.baseUnit).toFixed(4);
+  }
+
+  function calculateRuinPercentage(distanceToRuin) {
+    if (distanceToRuin <= 0) return 100;
+    if (distanceToRuin >= 100) return 0;
+    
+    // Simple calculation: inverse relationship between distance and risk
+    // The closer you are to ruin, the higher the percentage
+    return Math.min(100, Math.max(0, (1 / distanceToRuin) * 100)).toFixed(1);
+  }
+
+  function updateRuinDisplay() {
+    const distance = calculateDistanceToRuin();
+    const ruinPct = calculateRuinPercentage(distance);
+    
+    document.getElementById('distanceToRuin').textContent = distance;
+    document.getElementById('ruinPercentage').textContent = ruinPct + '%';
+    
+    // Update status color based on risk level
+    const statusEl = document.getElementById('ruinStatus');
+    if (distance <= 5) {
+      statusEl.textContent = 'CRITICAL RISK';
+      statusEl.className = 'text-xs font-bold text-red-600';
+    } else if (distance <= 10) {
+      statusEl.textContent = 'High Risk';
+      statusEl.className = 'text-xs font-medium text-orange-600';
+    } else if (distance <= 20) {
+      statusEl.textContent = 'Medium Risk';
+      statusEl.className = 'text-xs text-yellow-600';
+    } else {
+      statusEl.textContent = 'Low Risk';
+      statusEl.className = 'text-xs text-green-600';
+    }
+  }
+
   // helpers
   function seqSumEnds(seq){ 
     if(!Array.isArray(seq) || seq.length===0) return 0; 
@@ -829,6 +917,9 @@
     document.getElementById('baseUnitDisplay').textContent = state.baseUnit.toFixed(2);
     document.getElementById('maxRiskPct').textContent = state.maxRiskPct;
     document.getElementById('rrDisplay').textContent = state.rr.toFixed(2);
+
+    // Update Distance to Ruin
+    updateRuinDisplay();
 
     // Auto-calculate position size if settings are configured
     autoCalculatePosition();
