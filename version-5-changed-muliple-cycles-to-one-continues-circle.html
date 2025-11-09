@@ -1,1 +1,1226 @@
 
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Crypto Smart Cancellation Trainer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background-color: #f8fafc; color: #0f172a; }
+    .card { background: white; box-shadow: 0 8px 30px rgba(15,23,42,0.06); }
+    .modal-backdrop { background: rgba(2,6,23,0.45); }
+    .muted { color: #64748b; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", monospace; }
+    .file-input-hidden { opacity: 0; position: absolute; width: 0.1px; height: 0.1px; overflow: hidden; }
+    .modal-container { max-height: 90vh; overflow-y: auto; }
+  </style>
+</head>
+<body class="min-h-screen p-6">
+
+  <div class="max-w-4xl mx-auto">
+    <div class="card rounded-2xl p-6">
+
+      <header class="flex items-start justify-between mb-6">
+        <div>
+          <h1 class="text-2xl font-bold">Crypto Smart Cancellation Trainer</h1>
+          <p class="muted mt-1">Light-mode trainer — offline, saves to your browser. Use it trade-by-trade: click WIN or LOSS and the app guides the next step.</p>
+        </div>
+
+        <div class="flex gap-2">
+          <button id="positionCalcBtn" class="px-3 py-2 border rounded text-sm">📊 Position Calculator</button>
+          <button id="historyBtn" class="px-3 py-2 border rounded text-sm">📜 Trade History</button>
+          <button id="settingsBtn" class="px-3 py-2 border rounded text-sm">⚙️ Settings</button>
+        </div>
+      </header>
+
+      <main class="grid md:grid-cols-3 gap-4">
+        <!-- Left/Center: main controls -->
+        <section class="col-span-2">
+          <div class="p-4 rounded-2xl card mb-4">
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <div class="text-sm muted">Balance (USDT)</div>
+                <div class="text-xl mono" id="balance">$50.0000</div>
+              </div>
+              <div>
+                <div class="text-sm muted">Total Loss</div>
+                <div class="text-xl mono"><span id="cycleLoss">$0.0000</span></div>
+              </div>
+            </div>
+
+            <!-- Compounding Status Display -->
+            <div class="mt-4 p-3 rounded-lg bg-blue-50 border border-blue-200">
+              <div class="flex items-center justify-between mb-2">
+                <div class="text-sm font-medium text-blue-800">Compounding Status</div>
+                <div class="text-xs text-blue-600" id="compoundingStatus">Active</div>
+              </div>
+              <div class="grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <div class="text-blue-700">Base Unit:</div>
+                  <div class="mono text-blue-900" id="compoundingBaseUnit">$0.10</div>
+                </div>
+                <div>
+                  <div class="text-blue-700">Next Adjustment:</div>
+                  <div class="mono text-blue-900" id="nextCompoundingAt">$60.00</div>
+                </div>
+              </div>
+              <div class="mt-2 text-xs text-blue-600">
+                Base unit increases automatically as balance grows
+              </div>
+            </div>
+
+            <div class="mt-4 p-3 rounded-lg bg-slate-50 border">
+              <div class="flex items-center justify-between mb-2">
+                <div class="muted text-sm">Sequence</div>
+                <div class="text-sm muted">Units (first+last): <span id="units">3</span></div>
+              </div>
+              <div class="mono text-lg" id="sequence">1 - 1 - 2</div>
+
+              <div class="mt-3 grid grid-cols-2 gap-3">
+                <div>
+                  <div class="muted text-sm">Next Risk (USDT)</div>
+                  <div class="text-lg mono" id="nextRisk">$0.3000</div>
+                </div>
+                <div>
+                  <div class="muted text-sm">Next Reward (USDT)</div>
+                  <div class="text-lg mono" id="nextReward">$0.4500</div>
+                </div>
+              </div>
+
+              <!-- Position Calculator Results Display -->
+              <div class="mt-3 p-3 rounded-lg bg-green-50 border border-green-200">
+                <div class="text-sm font-medium text-green-800 mb-2">Position Size</div>
+                <div class="grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <div class="text-green-700">Quantity:</div>
+                    <div class="mono text-green-900" id="positionQuantity">-</div>
+                  </div>
+                  <div>
+                    <div class="text-green-700">Take Profit:</div>
+                    <div class="mono text-green-900" id="positionTakeProfit">-</div>
+                  </div>
+                  <div>
+                    <div class="text-green-700">Risk Amount:</div>
+                    <div class="mono text-green-900" id="positionRiskAmount">-</div>
+                  </div>
+                  <div>
+                    <div class="text-green-700">Reward Amount:</div>
+                    <div class="mono text-green-900" id="positionRewardAmount">-</div>
+                  </div>
+                </div>
+                <div class="mt-1 text-xs text-green-600" id="positionCalcStatus">
+                  Set up calculator to see position details
+                </div>
+              </div>
+
+              <div class="mt-3 text-sm muted" id="advice">Make the trade with the displayed risk. After it closes click WIN or LOSS.</div>
+
+              <div class="mt-4 flex gap-3">
+                <button id="winBtn" class="flex-1 px-4 py-2 rounded bg-emerald-600 text-white">WIN</button>
+                <button id="lossBtn" class="flex-1 px-4 py-2 rounded bg-rose-600 text-white">LOSS</button>
+                <button id="undoBtn" class="px-3 py-2 rounded border bg-gray-100" disabled>↩️ Undo</button>
+              </div>
+            </div>
+
+            <div class="mt-4 p-3 rounded-lg bg-white border">
+              <div class="flex items-center justify-between mb-2">
+                <div class="muted text-sm">Status</div>
+                <div class="text-xs muted">RR = <span id="rrDisplay">1.50</span> : 1</div>
+              </div>
+              <div id="statusMsg" class="text-sm">Ready</div>
+            </div>
+          </div>
+
+          <div class="p-4 rounded-2xl card">
+            <h3 class="font-semibold mb-2">Recent Trade Log</h3>
+            <div id="tradeLog" class="text-sm max-h-48 overflow-y-auto muted">No trades yet.</div>
+          </div>
+        </section>
+
+        <!-- Right: quick summary -->
+        <aside class="p-4 rounded-2xl card">
+          <div class="mb-4">
+            <div class="text-sm muted">Trade Summary</div>
+            <div class="text-lg mono">Trades: <span id="tradeCount">0</span></div>
+          </div>
+
+          <div class="mb-3">
+            <div class="text-sm muted">Base Unit</div>
+            <div class="mono">$<span id="baseUnitDisplay">0.10</span></div>
+          </div>
+
+          <div class="mb-3">
+            <div class="text-sm muted">Max Risk Limit</div>
+            <div class="mono"><span id="maxRiskPct">20</span>% of balance</div>
+          </div>
+
+          <!-- Compounding Settings Summary -->
+          <div class="mt-4 p-3 rounded-lg bg-slate-50 border">
+            <div class="text-sm font-medium mb-2">Compounding Settings</div>
+            <div class="text-xs muted mb-1">Threshold: <span id="compoundingThresholdDisplay">10</span>% growth</div>
+            <div class="text-xs muted">Step: <span id="compoundingStepDisplay">10</span>% increase</div>
+          </div>
+
+          <!-- Undo History Info -->
+          <div class="mt-4 p-3 rounded-lg bg-purple-50 border border-purple-200">
+            <div class="text-sm font-medium text-purple-800 mb-2">Undo History</div>
+            <div class="text-xs text-purple-700">
+              Last action: <span id="lastActionDisplay">None</span>
+            </div>
+            <div class="text-xs text-purple-600 mt-1">
+              Can undo: <span id="undoCount">0</span> actions
+            </div>
+          </div>
+
+          <!-- Data Management -->
+          <div class="mt-4 space-y-2">
+            <button id="exportDataBtn" class="w-full px-3 py-2 rounded bg-green-600 text-white text-sm">📤 Export App Data</button>
+            <button id="importDataBtn" class="w-full px-3 py-2 rounded bg-blue-600 text-white text-sm">📥 Import App Data</button>
+            <input type="file" id="fileInput" accept=".json" class="file-input-hidden" />
+          </div>
+        </aside>
+      </main>
+
+      <footer class="mt-6 text-xs muted">Tip: Use Settings to customize starting balance, base unit, RR and per-trade risk limit. The app blocks trades when they are too risky. Use Undo to revert your last action.</footer>
+    </div>
+  </div>
+
+  <!-- Position Calculator Modal -->
+  <div id="positionCalcModal" class="fixed inset-0 hidden items-center justify-center p-4">
+    <div class="modal-backdrop absolute inset-0"></div>
+    <div class="relative max-w-lg w-full max-h-[90vh] overflow-hidden">
+      <div class="bg-white rounded-2xl p-6 z-10 shadow-lg modal-container">
+        <h2 class="text-lg font-semibold mb-3">Position Size Calculator</h2>
+        
+        <div class="grid gap-3 mb-4">
+          <label class="text-sm">Entry Price
+            <input id="pc_entry" type="number" step="0.000001" class="w-full mt-1 p-2 border rounded" placeholder="e.g., 1.5000" />
+          </label>
+          <label class="text-sm">Stop Loss Price
+            <input id="pc_stopLoss" type="number" step="0.000001" class="w-full mt-1 p-2 border rounded" placeholder="e.g., 1.4800" />
+          </label>
+          <label class="text-sm">Risk-Reward Ratio
+            <input id="pc_rrRatio" type="number" step="0.1" class="w-full mt-1 p-2 border rounded" placeholder="e.g., 1.5" value="1.5" />
+          </label>
+        </div>
+
+        <div class="p-3 bg-blue-50 border border-blue-200 rounded mb-4">
+          <div class="text-sm font-medium text-blue-800 mb-2">Current Risk Settings</div>
+          <div class="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <div class="text-blue-700">Next Risk:</div>
+              <div class="mono text-blue-900" id="pc_currentRisk">$0.3000</div>
+            </div>
+            <div>
+              <div class="text-blue-700">Next Reward:</div>
+              <div class="mono text-blue-900" id="pc_currentReward">$0.4500</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="p-3 bg-green-50 border border-green-200 rounded mb-4">
+          <div class="text-sm font-medium text-green-800 mb-2">Calculated Position</div>
+          <div class="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <div class="text-green-700">Take Profit:</div>
+              <div class="mono text-green-900" id="pc_takeProfit">-</div>
+            </div>
+            <div>
+              <div class="text-green-700">Position Size:</div>
+              <div class="mono text-green-900" id="pc_positionSize">-</div>
+            </div>
+            <div>
+              <div class="text-green-700">Stop Distance:</div>
+              <div class="mono text-green-900" id="pc_stopDistance">-</div>
+            </div>
+            <div>
+              <div class="text-green-700">Reward Amount:</div>
+              <div class="mono text-green-900" id="pc_rewardAmount">-</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="text-xs muted mb-4">
+          <strong>How it works:</strong> Uses your current "Next Risk" amount automatically. The distance from entry to stop loss is calculated based on your risk-reward ratio. Take profit is automatically set to maintain your desired RR ratio. Quantity is rounded down to ensure you don't exceed your risk.
+        </div>
+
+        <div class="flex justify-between gap-2">
+          <button id="pc_clear" class="px-3 py-2 rounded border">Clear</button>
+          <div class="flex gap-2">
+            <button id="pc_cancel" class="px-3 py-2 rounded border">Cancel</button>
+            <button id="pc_calculate" class="px-3 py-2 rounded bg-slate-800 text-white">Calculate</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="settingsModal" class="fixed inset-0 hidden items-center justify-center p-4">
+    <div class="modal-backdrop absolute inset-0"></div>
+    <div class="relative max-w-lg w-full max-h-[90vh] overflow-hidden">
+      <div class="bg-white rounded-2xl p-6 z-10 shadow-lg modal-container">
+        <h2 class="text-lg font-semibold mb-3">Settings</h2>
+        <div class="grid gap-3">
+          <label class="text-sm">Starting Balance (USDT)
+            <input id="s_balance" type="number" step="0.1" class="w-full mt-1 p-2 border rounded" />
+          </label>
+          <label class="text-sm">Base Unit (USDT per unit)
+            <input id="s_baseUnit" type="number" step="0.01" class="w-full mt-1 p-2 border rounded" />
+          </label>
+          <label class="text-sm">Risk : Reward (1 : X)
+            <input id="s_rr" type="number" step="0.1" class="w-full mt-1 p-2 border rounded" />
+          </label>
+          <label class="text-sm">Max Risk Limit (% of balance)
+            <input id="s_maxRiskPct" type="number" step="1" class="w-full mt-1 p-2 border rounded" />
+          </label>
+          <label class="text-sm">Initial Sequence (comma separated units)
+            <input id="s_sequence" type="text" class="w-full mt-1 p-2 border rounded" />
+          </label>
+          
+          <!-- Compounding Settings -->
+          <div class="border-t pt-3 mt-2">
+            <div class="text-sm font-medium mb-2">Compounding Settings</div>
+            <label class="text-sm">Compounding Threshold (% growth)
+              <input id="s_compoundingThreshold" type="number" step="1" min="1" max="100" class="w-full mt-1 p-2 border rounded" />
+            </label>
+            <label class="text-sm">Compounding Step (% increase)
+              <input id="s_compoundingStep" type="number" step="1" min="1" max="100" class="w-full mt-1 p-2 border rounded" />
+            </label>
+            <div class="text-xs muted mt-1">Base unit increases when balance grows by threshold percentage</div>
+          </div>
+
+          <!-- Undo Settings -->
+          <div class="border-t pt-3 mt-2">
+            <div class="text-sm font-medium mb-2">Undo Settings</div>
+            <label class="text-sm">Max Undo History Size
+              <input id="s_maxUndoHistory" type="number" step="1" min="1" max="50" class="w-full mt-1 p-2 border rounded" />
+            </label>
+            <div class="text-xs muted mt-1">Maximum number of actions that can be undone</div>
+          </div>
+        </div>
+
+        <div class="mt-4 flex justify-between gap-2">
+          <button id="s_cancel" class="px-3 py-2 rounded border">Cancel</button>
+          <div class="flex gap-2">
+            <button id="s_save" class="px-3 py-2 rounded bg-slate-800 text-white">Save</button>
+          </div>
+        </div>
+
+        <div class="mt-4 border-t pt-4">
+          <div class="text-sm muted mb-2">Danger zone</div>
+          <button id="fullResetBtn" class="w-full bg-red-500 text-white py-2 rounded">🔁 Reset Entire App (clear all data)</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- History Modal -->
+  <div id="historyModal" class="fixed inset-0 hidden items-center justify-center p-4">
+    <div class="modal-backdrop absolute inset-0"></div>
+    <div class="relative max-w-3xl w-full max-h-[90vh] overflow-hidden">
+      <div class="bg-white rounded-2xl p-6 z-10 shadow-lg modal-container">
+        <h2 class="text-lg font-semibold mb-3">Trade History</h2>
+        <div class="mb-3 text-sm muted">Your complete trading history in one continuous session.</div>
+        <div id="historyTable" class="text-sm"></div>
+
+        <div class="mt-4 flex justify-between">
+          <div>
+            <button id="clearHistory" class="px-3 py-2 rounded border">Clear History</button>
+          </div>
+          <div class="flex gap-2">
+            <button id="closeHistory" class="px-3 py-2 rounded border">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Import Data Modal -->
+  <div id="importModal" class="fixed inset-0 hidden items-center justify-center p-4">
+    <div class="modal-backdrop absolute inset-0"></div>
+    <div class="relative max-w-lg w-full max-h-[90vh] overflow-hidden">
+      <div class="bg-white rounded-2xl p-6 z-10 shadow-lg modal-container">
+        <h2 class="text-lg font-semibold mb-3">Import App Data</h2>
+        
+        <div class="mb-4 text-center">
+          <div class="p-4 border-2 border-dashed border-blue-300 rounded-lg bg-blue-50 mb-3">
+            <div class="text-blue-700 mb-2">📁 Select your exported JSON file</div>
+            <button id="selectFileBtn" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+              Choose File
+            </button>
+            <div id="fileName" class="text-sm text-blue-600 mt-2 hidden"></div>
+          </div>
+          
+          <div class="text-xs muted">
+            Or drag and drop your .json file here
+          </div>
+        </div>
+        
+        <div class="p-3 bg-yellow-50 border border-yellow-200 rounded mb-4">
+          <div class="text-sm text-yellow-800">
+            <strong>Warning:</strong> This will replace ALL current app data including:
+            <ul class="list-disc list-inside mt-1 ml-2">
+              <li>Current balance and trading state</li>
+              <li>All trade history</li>
+              <li>Settings</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="flex justify-between gap-2">
+          <button id="importCancel" class="px-3 py-2 rounded border">Cancel</button>
+          <div class="flex gap-2">
+            <button id="importConfirm" class="px-3 py-2 rounded bg-blue-600 text-white" disabled>Import Data</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // -------------------------
+  // Keys & defaults
+  // -------------------------
+  const LS_KEY = 'cancelTrainer_one_cycle_v1';
+  const LS_UNDO_HISTORY = 'cancelTrainer_undo_history_v1';
+
+  const defaults = {
+    balance: 50.0,
+    baseUnit: 0.04,
+    rr: 1.5,
+    maxRiskPct: 20,
+    sequence: [3],
+    tradeCount: 0,
+    totalLoss: 0,
+    history: [],
+    // Compounding settings
+    compoundingThreshold: 10,  // % growth needed to trigger compounding
+    compoundingStep: 10,       // % increase in base unit when compounding
+    originalBaseUnit: 0.10,    // Track original base unit for calculations
+    lastCompoundingBalance: 50.0, // Balance at last compounding event
+    // Position calculator settings
+    positionCalcSettings: {
+      entryPrice: '',
+      stopLossPrice: '',
+      rrRatio: 1.5
+    },
+    // Undo settings
+    maxUndoHistory: 10
+  };
+
+  // Load state
+  let saved = JSON.parse(localStorage.getItem(LS_KEY));
+  let state = saved ? {...defaults, ...saved} : {...defaults};
+  let undoHistory = JSON.parse(localStorage.getItem(LS_UNDO_HISTORY)) || [];
+
+  // Initialize compounding tracking if not present
+  state.originalBaseUnit = state.originalBaseUnit ?? state.baseUnit;
+  state.lastCompoundingBalance = state.lastCompoundingBalance ?? state.balance;
+
+  // Initialize position calculator settings if not present
+  state.positionCalcSettings = state.positionCalcSettings ?? defaults.positionCalcSettings;
+
+  // Initialize undo settings if not present
+  state.maxUndoHistory = state.maxUndoHistory ?? defaults.maxUndoHistory;
+
+  // Calculate max risk per trade
+  Object.defineProperty(state, 'maxRiskPerTrade', { 
+    get: function(){ 
+      return +(state.balance * (state.maxRiskPct/100)).toFixed(4); 
+    }, 
+    configurable: true 
+  });
+
+  // Calculate next compounding threshold
+  Object.defineProperty(state, 'nextCompoundingAt', {
+    get: function() {
+      const growthNeeded = state.lastCompoundingBalance * (state.compoundingThreshold / 100);
+      return +(state.lastCompoundingBalance + growthNeeded).toFixed(2);
+    },
+    configurable: true
+  });
+
+  // helpers
+  function seqSumEnds(seq){ 
+    if(!Array.isArray(seq) || seq.length===0) return 0; 
+    if(seq.length===1) return seq[0]*2; 
+    return seq[0] + seq[seq.length-1]; 
+  }
+  
+  function nextRisk(){ 
+    return +(seqSumEnds(state.sequence) * state.baseUnit).toFixed(4); 
+  }
+  
+  function nextReward(){ 
+    return +(nextRisk() * state.rr).toFixed(4); 
+  }
+  
+  function blockedCheck(){ 
+    const r = nextRisk(); 
+    return (r > state.maxRiskPerTrade) || (r > state.balance); 
+  }
+
+  // Undo functionality
+  function saveStateForUndo(actionType, description) {
+    const undoState = {
+      timestamp: new Date().toISOString(),
+      actionType: actionType,
+      description: description,
+      state: {
+        balance: state.balance,
+        baseUnit: state.baseUnit,
+        sequence: [...state.sequence],
+        tradeCount: state.tradeCount,
+        totalLoss: state.totalLoss,
+        history: [...state.history],
+        lastCompoundingBalance: state.lastCompoundingBalance,
+        message: state.message
+      }
+    };
+    
+    // Add to undo history (most recent first)
+    undoHistory.unshift(undoState);
+    
+    // Limit undo history size
+    if (undoHistory.length > state.maxUndoHistory) {
+      undoHistory = undoHistory.slice(0, state.maxUndoHistory);
+    }
+    
+    saveUndoHistory();
+    updateUndoUI();
+  }
+
+  function undoLastAction() {
+    if (undoHistory.length === 0) return false;
+    
+    const lastState = undoHistory.shift();
+    
+    // Restore state
+    state.balance = lastState.state.balance;
+    state.baseUnit = lastState.state.baseUnit;
+    state.sequence = [...lastState.state.sequence];
+    state.tradeCount = lastState.state.tradeCount;
+    state.totalLoss = lastState.state.totalLoss;
+    state.history = [...lastState.state.history];
+    state.lastCompoundingBalance = lastState.state.lastCompoundingBalance;
+    state.message = `Undid: ${lastState.description}`;
+    
+    saveState();
+    saveUndoHistory();
+    updateUI();
+    updateUndoUI();
+    
+    return true;
+  }
+
+  function saveUndoHistory() {
+    localStorage.setItem(LS_UNDO_HISTORY, JSON.stringify(undoHistory));
+  }
+
+  function updateUndoUI() {
+    const undoBtn = document.getElementById('undoBtn');
+    const lastActionDisplay = document.getElementById('lastActionDisplay');
+    const undoCount = document.getElementById('undoCount');
+    
+    if (undoHistory.length > 0) {
+      undoBtn.disabled = false;
+      undoBtn.className = 'px-3 py-2 rounded border bg-blue-100 text-blue-700 hover:bg-blue-200';
+      lastActionDisplay.textContent = undoHistory[0].description;
+    } else {
+      undoBtn.disabled = true;
+      undoBtn.className = 'px-3 py-2 rounded border bg-gray-100 text-gray-400 cursor-not-allowed';
+      lastActionDisplay.textContent = 'None';
+    }
+    
+    undoCount.textContent = undoHistory.length;
+  }
+
+  function clearUndoHistory() {
+    undoHistory = [];
+    saveUndoHistory();
+    updateUndoUI();
+  }
+
+  // Position Calculator Functions
+  function calculatePositionSize() {
+    const entry = parseFloat(document.getElementById('pc_entry').value);
+    const stopLoss = parseFloat(document.getElementById('pc_stopLoss').value);
+    const rrRatio = parseFloat(document.getElementById('pc_rrRatio').value);
+    const currentRisk = nextRisk();
+    
+    if (!entry || !stopLoss || !rrRatio) {
+      alert('Please fill in all fields');
+      return;
+    }
+    
+    if (entry <= 0 || stopLoss <= 0 || rrRatio <= 0) {
+      alert('All values must be positive numbers');
+      return;
+    }
+    
+    if (entry === stopLoss) {
+      alert('Entry price and stop loss cannot be the same');
+      return;
+    }
+    
+    // Calculate stop distance based on RR ratio
+    const isLong = entry > stopLoss;
+    let stopDistance;
+    
+    if (isLong) {
+      // Long position: entry > stopLoss
+      stopDistance = entry - stopLoss;
+    } else {
+      // Short position: entry < stopLoss  
+      stopDistance = stopLoss - entry;
+    }
+    
+    // Calculate take profit based on RR ratio
+    let takeProfit;
+    if (isLong) {
+      takeProfit = entry + (stopDistance * rrRatio);
+    } else {
+      takeProfit = entry - (stopDistance * rrRatio);
+    }
+    
+    // Calculate position size (quantity)
+    // Risk Amount = Position Size * Stop Distance
+    const positionSize = currentRisk / stopDistance;
+    
+    // Round down to ensure we don't exceed risk
+    const roundedPositionSize = Math.floor(positionSize * 10000) / 10000; // Round to 4 decimal places
+    
+    // Calculate actual reward amount with rounded position size
+    const actualRewardAmount = roundedPositionSize * (stopDistance * rrRatio);
+    
+    // Update UI with results
+    document.getElementById('pc_takeProfit').textContent = takeProfit.toFixed(6);
+    document.getElementById('pc_positionSize').textContent = roundedPositionSize.toFixed(4);
+    document.getElementById('pc_stopDistance').textContent = stopDistance.toFixed(6);
+    document.getElementById('pc_rewardAmount').textContent = '$' + actualRewardAmount.toFixed(4);
+    
+    // Update main display with position info
+    document.getElementById('positionQuantity').textContent = roundedPositionSize.toFixed(4);
+    document.getElementById('positionTakeProfit').textContent = takeProfit.toFixed(6);
+    document.getElementById('positionRiskAmount').textContent = '$' + currentRisk.toFixed(4);
+    document.getElementById('positionRewardAmount').textContent = '$' + actualRewardAmount.toFixed(4);
+    document.getElementById('positionCalcStatus').textContent = `Auto-calculated using risk: $${currentRisk.toFixed(4)}`;
+    
+    // Save current settings
+    state.positionCalcSettings = {
+      entryPrice: entry,
+      stopLossPrice: stopLoss,
+      rrRatio: rrRatio
+    };
+    saveState();
+    
+    return {
+      quantity: roundedPositionSize,
+      takeProfit: takeProfit,
+      stopDistance: stopDistance,
+      rewardAmount: actualRewardAmount
+    };
+  }
+
+  function autoCalculatePosition() {
+    // Auto-calculate if we have all required fields
+    if (state.positionCalcSettings.entryPrice && 
+        state.positionCalcSettings.stopLossPrice && 
+        state.positionCalcSettings.rrRatio) {
+      
+      const entry = parseFloat(state.positionCalcSettings.entryPrice);
+      const stopLoss = parseFloat(state.positionCalcSettings.stopLossPrice);
+      const rrRatio = parseFloat(state.positionCalcSettings.rrRatio);
+      const currentRisk = nextRisk();
+      
+      if (entry && stopLoss && rrRatio && currentRisk > 0) {
+        const isLong = entry > stopLoss;
+        let stopDistance;
+        
+        if (isLong) {
+          stopDistance = entry - stopLoss;
+        } else {
+          stopDistance = stopLoss - entry;
+        }
+        
+        let takeProfit;
+        if (isLong) {
+          takeProfit = entry + (stopDistance * rrRatio);
+        } else {
+          takeProfit = entry - (stopDistance * rrRatio);
+        }
+        
+        const positionSize = currentRisk / stopDistance;
+        const roundedPositionSize = Math.floor(positionSize * 10000) / 10000;
+        const actualRewardAmount = roundedPositionSize * (stopDistance * rrRatio);
+        
+        // Update main display
+        document.getElementById('positionQuantity').textContent = roundedPositionSize.toFixed(4);
+        document.getElementById('positionTakeProfit').textContent = takeProfit.toFixed(6);
+        document.getElementById('positionRiskAmount').textContent = '$' + currentRisk.toFixed(4);
+        document.getElementById('positionRewardAmount').textContent = '$' + actualRewardAmount.toFixed(4);
+        document.getElementById('positionCalcStatus').textContent = `Auto-calculated using risk: $${currentRisk.toFixed(4)}`;
+      }
+    }
+  }
+
+  function loadPositionCalcSettings() {
+    if (state.positionCalcSettings) {
+      document.getElementById('pc_entry').value = state.positionCalcSettings.entryPrice || '';
+      document.getElementById('pc_stopLoss').value = state.positionCalcSettings.stopLossPrice || '';
+      document.getElementById('pc_rrRatio').value = state.positionCalcSettings.rrRatio || 1.5;
+    }
+    // Update current risk display
+    document.getElementById('pc_currentRisk').textContent = '$' + nextRisk().toFixed(4);
+    document.getElementById('pc_currentReward').textContent = '$' + nextReward().toFixed(4);
+  }
+
+  function clearPositionCalc() {
+    document.getElementById('pc_entry').value = '';
+    document.getElementById('pc_stopLoss').value = '';
+    document.getElementById('pc_rrRatio').value = 1.5;
+    document.getElementById('pc_takeProfit').textContent = '-';
+    document.getElementById('pc_positionSize').textContent = '-';
+    document.getElementById('pc_stopDistance').textContent = '-';
+    document.getElementById('pc_rewardAmount').textContent = '-';
+    
+    // Clear main display
+    document.getElementById('positionQuantity').textContent = '-';
+    document.getElementById('positionTakeProfit').textContent = '-';
+    document.getElementById('positionRiskAmount').textContent = '-';
+    document.getElementById('positionRewardAmount').textContent = '-';
+    document.getElementById('positionCalcStatus').textContent = 'Set up calculator to see position details';
+    
+    // Clear saved settings
+    state.positionCalcSettings = {
+      entryPrice: '',
+      stopLossPrice: '',
+      rrRatio: 1.5
+    };
+    saveState();
+  }
+
+  // Compounding logic
+  function checkAndApplyCompounding() {
+    const growthFromLastCompounding = ((state.balance - state.lastCompoundingBalance) / state.lastCompoundingBalance) * 100;
+    
+    if (growthFromLastCompounding >= state.compoundingThreshold) {
+      // Calculate new base unit
+      const newBaseUnit = +(state.baseUnit * (1 + state.compoundingStep/100)).toFixed(4);
+      const oldBaseUnit = state.baseUnit;
+      
+      // Update base unit and tracking
+      state.baseUnit = newBaseUnit;
+      state.lastCompoundingBalance = state.balance;
+      
+      // Log the compounding event
+      state.history.unshift({
+        type: 'COMPOUNDING',
+        info: `Base unit increased from $${oldBaseUnit.toFixed(4)} to $${newBaseUnit.toFixed(4)}`,
+        oldBaseUnit: oldBaseUnit.toFixed(4),
+        newBaseUnit: newBaseUnit.toFixed(4),
+        balance: state.balance.toFixed(4),
+        timestamp: new Date().toISOString()
+      });
+      
+      state.message = `Compounding: Base unit increased to $${newBaseUnit.toFixed(4)}`;
+      return true;
+    }
+    return false;
+  }
+
+  // Export app data function
+  function exportAppData() {
+    const appData = {
+      version: '1.0',
+      exportDate: new Date().toISOString(),
+      state: {
+        balance: state.balance,
+        baseUnit: state.baseUnit,
+        rr: state.rr,
+        maxRiskPct: state.maxRiskPct,
+        sequence: state.sequence,
+        tradeCount: state.tradeCount,
+        totalLoss: state.totalLoss,
+        history: state.history,
+        compoundingThreshold: state.compoundingThreshold,
+        compoundingStep: state.compoundingStep,
+        originalBaseUnit: state.originalBaseUnit,
+        lastCompoundingBalance: state.lastCompoundingBalance,
+        positionCalcSettings: state.positionCalcSettings,
+        maxUndoHistory: state.maxUndoHistory
+      },
+      undoHistory: undoHistory
+    };
+    
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(appData, null, 2));
+    const dl = document.createElement('a');
+    dl.setAttribute('href', dataStr);
+    dl.setAttribute('download', `trading_trainer_export_${new Date().toISOString().split('T')[0]}.json`);
+    dl.click();
+  }
+
+  // Import app data function
+  function importAppData(jsonData) {
+    try {
+      const data = JSON.parse(jsonData);
+      
+      if (!data.state) {
+        throw new Error('Invalid data format: missing state');
+      }
+      
+      // Validate required fields
+      const required = ['balance', 'baseUnit', 'rr', 'maxRiskPct', 'sequence'];
+      for (const field of required) {
+        if (data.state[field] === undefined) {
+          throw new Error(`Invalid data: missing required field '${field}'`);
+        }
+      }
+      
+      // Replace current state
+      state = { ...defaults, ...data.state };
+      undoHistory = data.undoHistory || [];
+      
+      // Save to localStorage
+      saveState();
+      saveUndoHistory();
+      
+      return true;
+    } catch (error) {
+      console.error('Import error:', error);
+      return false;
+    }
+  }
+
+  // persist functions
+  function saveState(){ 
+    localStorage.setItem(LS_KEY, JSON.stringify({
+      balance: state.balance,
+      baseUnit: state.baseUnit,
+      rr: state.rr,
+      maxRiskPct: state.maxRiskPct,
+      sequence: state.sequence,
+      tradeCount: state.tradeCount,
+      totalLoss: state.totalLoss,
+      history: state.history,
+      // Compounding settings
+      compoundingThreshold: state.compoundingThreshold,
+      compoundingStep: state.compoundingStep,
+      originalBaseUnit: state.originalBaseUnit,
+      lastCompoundingBalance: state.lastCompoundingBalance,
+      // Position calculator settings
+      positionCalcSettings: state.positionCalcSettings,
+      // Undo settings
+      maxUndoHistory: state.maxUndoHistory
+    })); 
+  }
+
+  // UI update
+  function updateUI(){
+    document.getElementById('balance').textContent = (state.balance ?? 0).toFixed(4);
+    document.getElementById('cycleLoss').textContent = (state.totalLoss ?? 0).toFixed(4);
+    document.getElementById('sequence').textContent = state.sequence && state.sequence.length ? state.sequence.join(' - ') : '(empty — completed)';
+    document.getElementById('units').textContent = seqSumEnds(state.sequence);
+    document.getElementById('nextRisk').textContent = '$' + nextRisk().toFixed(4);
+    document.getElementById('nextReward').textContent = '$' + nextReward().toFixed(4);
+    document.getElementById('tradeCount').textContent = state.tradeCount;
+    document.getElementById('baseUnitDisplay').textContent = state.baseUnit.toFixed(2);
+    document.getElementById('maxRiskPct').textContent = state.maxRiskPct;
+    document.getElementById('rrDisplay').textContent = state.rr.toFixed(2);
+
+    // Auto-calculate position size if settings are configured
+    autoCalculatePosition();
+
+    // Compounding displays
+    document.getElementById('compoundingBaseUnit').textContent = '$' + state.baseUnit.toFixed(4);
+    document.getElementById('nextCompoundingAt').textContent = '$' + state.nextCompoundingAt;
+    document.getElementById('compoundingThresholdDisplay').textContent = state.compoundingThreshold + '%';
+    document.getElementById('compoundingStepDisplay').textContent = state.compoundingStep + '%';
+    
+    // Compounding status
+    const growthFromLast = ((state.balance - state.lastCompoundingBalance) / state.lastCompoundingBalance) * 100;
+    const statusEl = document.getElementById('compoundingStatus');
+    if (growthFromLast >= state.compoundingThreshold) {
+      statusEl.textContent = 'Ready to Compound!';
+      statusEl.className = 'text-xs font-medium text-green-600';
+    } else {
+      statusEl.textContent = `Active (${growthFromLast.toFixed(1)}%/${state.compoundingThreshold}%)`;
+      statusEl.className = 'text-xs text-blue-600';
+    }
+
+    // trade log (recent)
+    const log = document.getElementById('tradeLog');
+    if(state.history && state.history.length){
+      log.innerHTML = state.history.slice(0,25).map(h => {
+        // ensure defensive defaults
+        const risk = h.risk ?? '0.0000';
+        const reward = h.reward ?? '-';
+        const bal = h.balance ?? '0.0000';
+        const seq = h.seq ?? '';
+        
+        // Special styling for compounding events
+        if (h.type === 'COMPOUNDING') {
+          return `<div class="py-1 border-b border-blue-200 bg-blue-50 -mx-2 px-2">
+                    <div class="mono text-sm text-blue-700">${h.type}</div>
+                    <div class="text-xs text-blue-600">${h.info} • Bal: $${bal}</div>
+                  </div>`;
+        }
+        
+        return `<div class="py-1 border-b"><div class="mono text-sm">${h.type}</div><div class="text-xs muted">Risk: $${risk} • Reward: ${reward !== '-' ? '$'+reward : '-'} • Bal: $${bal} • Seq: ${seq}</div></div>`;
+      }).join('');
+    } else log.innerHTML = '<div class="muted">No trades yet.</div>';
+
+    // blocking logic
+    const status = document.getElementById('statusMsg');
+    const advice = document.getElementById('advice');
+    const winBtn = document.getElementById('winBtn');
+    const lossBtn = document.getElementById('lossBtn');
+    const r = nextRisk();
+    const cap = state.maxRiskPerTrade;
+    const blocked = blockedCheck();
+
+    if(blocked){
+      status.textContent = `⚠️ Trade Blocked: Next risk $${r.toFixed(4)} exceeds allowed per-trade cap $${cap.toFixed(4)}.`;
+      advice.textContent = 'Action: Adjust Settings or wait for balance to grow. WIN/LOSS disabled.';
+      winBtn.disabled = true; lossBtn.disabled = true;
+      winBtn.className = 'flex-1 px-4 py-2 rounded bg-emerald-200 text-emerald-800 cursor-not-allowed';
+      lossBtn.className = 'flex-1 px-4 py-2 rounded bg-rose-200 text-rose-800 cursor-not-allowed';
+    } else {
+      status.textContent = state.message || 'Ready';
+      advice.textContent = `Make the trade with risk $${r.toFixed(4)}. After it closes click WIN or LOSS.`;
+      winBtn.disabled = false; lossBtn.disabled = false;
+      winBtn.className = 'flex-1 px-4 py-2 rounded bg-emerald-600 text-white';
+      lossBtn.className = 'flex-1 px-4 py-2 rounded bg-rose-600 text-white';
+    }
+
+    saveState();
+  }
+
+  // Startup normalize
+  state.sequence = state.sequence || JSON.parse(JSON.stringify(defaults.sequence));
+  state.baseUnit = state.baseUnit ?? defaults.baseUnit;
+  state.rr = state.rr ?? defaults.rr;
+  state.maxRiskPct = state.maxRiskPct ?? defaults.maxRiskPct;
+  state.tradeCount = state.tradeCount ?? 0;
+  state.totalLoss = state.totalLoss ?? 0;
+  state.history = state.history || [];
+  
+  // Compounding defaults
+  state.compoundingThreshold = state.compoundingThreshold ?? defaults.compoundingThreshold;
+  state.compoundingStep = state.compoundingStep ?? defaults.compoundingStep;
+  state.originalBaseUnit = state.originalBaseUnit ?? defaults.originalBaseUnit;
+  state.lastCompoundingBalance = state.lastCompoundingBalance ?? state.balance;
+
+  // Position calculator defaults
+  state.positionCalcSettings = state.positionCalcSettings ?? defaults.positionCalcSettings;
+
+  // Undo settings defaults
+  state.maxUndoHistory = state.maxUndoHistory ?? defaults.maxUndoHistory;
+
+  // File handling variables
+  let selectedFile = null;
+
+  // Position Calculator Modal
+  const positionCalcModal = document.getElementById('positionCalcModal');
+  document.getElementById('positionCalcBtn').addEventListener('click', () => {
+    loadPositionCalcSettings();
+    positionCalcModal.classList.remove('hidden');
+    positionCalcModal.classList.add('flex');
+  });
+
+  document.getElementById('pc_cancel').addEventListener('click', () => {
+    positionCalcModal.classList.add('hidden');
+    positionCalcModal.classList.remove('flex');
+  });
+
+  document.getElementById('pc_calculate').addEventListener('click', calculatePositionSize);
+
+  document.getElementById('pc_clear').addEventListener('click', clearPositionCalc);
+
+  // Undo button
+  document.getElementById('undoBtn').addEventListener('click', () => {
+    undoLastAction();
+  });
+
+  // Actions: WIN
+  document.getElementById('winBtn').addEventListener('click', () => {
+    const r = nextRisk(); if(r <= 0) return;
+    const rw = nextReward();
+    
+    // Save state for undo before making changes
+    saveStateForUndo('WIN', `WIN trade +$${rw.toFixed(4)}`);
+    
+    state.balance = +(state.balance + rw).toFixed(4);
+    state.message = `WIN +$${rw.toFixed(4)}`;
+    
+    // Check for compounding after win
+    checkAndApplyCompounding();
+    
+    // cancellation: remove first & last
+    if(state.sequence.length >= 2){ state.sequence.shift(); state.sequence.pop(); } else state.sequence = [];
+    state.tradeCount += 1;
+    
+    // log trade event with safe fields
+    state.history.unshift({
+      type:'WIN',
+      risk: r.toFixed(4),
+      reward: rw.toFixed(4),
+      balance: state.balance.toFixed(4),
+      seq: state.sequence.join('-')
+    });
+    
+    // if sequence cleared -> automatically restart sequence
+    if(state.sequence.length === 0){
+      state.sequence = JSON.parse(JSON.stringify(defaults.sequence));
+      state.history.unshift({type:'SEQUENCE_RESTART', info: 'Sequence completed and restarted'});
+      state.message = 'Sequence completed! Restarting with initial sequence.';
+    }
+    updateUI();
+  });
+
+  // Actions: LOSS
+  document.getElementById('lossBtn').addEventListener('click', () => {
+    const r = nextRisk(); if(r <= 0) return;
+    
+    // Save state for undo before making changes
+    saveStateForUndo('LOSS', `LOSS trade -$${r.toFixed(4)}`);
+    
+    state.balance = +(state.balance - r).toFixed(4);
+    state.totalLoss = +(state.totalLoss + r).toFixed(4);
+    state.tradeCount += 1;
+    const units = seqSumEnds(state.sequence) || 1;
+    state.sequence.push(units);
+    state.history.unshift({
+      type:'LOSS',
+      risk: r.toFixed(4),
+      reward: '-',
+      balance: state.balance.toFixed(4),
+      seq: state.sequence.join('-')
+    });
+    state.message = `LOSS -$${r.toFixed(4)} (Total loss $${state.totalLoss.toFixed(4)})`;
+    updateUI();
+  });
+
+  // Export Data
+  document.getElementById('exportDataBtn').addEventListener('click', exportAppData);
+
+  // Import Data with file selection
+  const importModal = document.getElementById('importModal');
+  const fileInput = document.getElementById('fileInput');
+  const selectFileBtn = document.getElementById('selectFileBtn');
+  const fileName = document.getElementById('fileName');
+  const importConfirm = document.getElementById('importConfirm');
+
+  document.getElementById('importDataBtn').addEventListener('click', () => {
+    selectedFile = null;
+    fileName.classList.add('hidden');
+    importConfirm.disabled = true;
+    importModal.classList.remove('hidden');
+    importModal.classList.add('flex');
+  });
+
+  selectFileBtn.addEventListener('click', () => {
+    fileInput.click();
+  });
+
+  fileInput.addEventListener('change', (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      if (file.type === 'application/json' || file.name.endsWith('.json')) {
+        selectedFile = file;
+        fileName.textContent = `Selected: ${file.name}`;
+        fileName.classList.remove('hidden');
+        importConfirm.disabled = false;
+      } else {
+        alert('Please select a JSON file.');
+        fileInput.value = '';
+        selectedFile = null;
+        fileName.classList.add('hidden');
+        importConfirm.disabled = true;
+      }
+    }
+  });
+
+  // Drag and drop support
+  importModal.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    importModal.style.backgroundColor = '#f0f9ff';
+  });
+
+  importModal.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    importModal.style.backgroundColor = '';
+  });
+
+  importModal.addEventListener('drop', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    importModal.style.backgroundColor = '';
+    
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      const file = files[0];
+      if (file.type === 'application/json' || file.name.endsWith('.json')) {
+        selectedFile = file;
+        fileName.textContent = `Selected: ${file.name}`;
+        fileName.classList.remove('hidden');
+        importConfirm.disabled = false;
+        fileInput.files = files; // Sync with file input
+      } else {
+        alert('Please drop a JSON file.');
+      }
+    }
+  });
+
+  document.getElementById('importCancel').addEventListener('click', () => {
+    importModal.classList.add('hidden');
+    importModal.classList.remove('flex');
+    fileInput.value = '';
+    selectedFile = null;
+  });
+
+  document.getElementById('importConfirm').addEventListener('click', () => {
+    if (!selectedFile) {
+      alert('Please select a file first.');
+      return;
+    }
+
+    if (confirm('⚠️ This will replace ALL current data. Are you sure?')) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const success = importAppData(e.target.result);
+          if (success) {
+            alert('Data imported successfully! The app will reload.');
+            importModal.classList.add('hidden');
+            importModal.classList.remove('flex');
+            location.reload();
+          } else {
+            alert('❌ Failed to import data. Please check the file format and try again.');
+          }
+        } catch (error) {
+          alert('❌ Error reading file. Please make sure it\'s a valid JSON file.');
+        }
+      };
+      reader.readAsText(selectedFile);
+    }
+  });
+
+  // Settings modal handlers
+  const settingsModal = document.getElementById('settingsModal');
+  document.getElementById('settingsBtn').addEventListener('click', () => {
+    document.getElementById('s_balance').value = (state.balance ?? defaults.balance).toFixed(2);
+    document.getElementById('s_baseUnit').value = (state.baseUnit ?? defaults.baseUnit).toFixed(2);
+    document.getElementById('s_rr').value = (state.rr ?? defaults.rr).toFixed(2);
+    document.getElementById('s_maxRiskPct').value = state.maxRiskPct ?? defaults.maxRiskPct;
+    document.getElementById('s_sequence').value = state.sequence.join(',');
+    
+    // Compounding settings
+    document.getElementById('s_compoundingThreshold').value = state.compoundingThreshold ?? defaults.compoundingThreshold;
+    document.getElementById('s_compoundingStep').value = state.compoundingStep ?? defaults.compoundingStep;
+    
+    // Undo settings
+    document.getElementById('s_maxUndoHistory').value = state.maxUndoHistory ?? defaults.maxUndoHistory;
+    
+    settingsModal.classList.remove('hidden'); settingsModal.classList.add('flex');
+  });
+  
+  document.getElementById('s_cancel').addEventListener('click', () => { settingsModal.classList.add('hidden'); settingsModal.classList.remove('flex'); });
+  
+  document.getElementById('s_save').addEventListener('click', () => {
+    // Save state for undo before making changes
+    saveStateForUndo('SETTINGS_CHANGE', 'Changed app settings');
+    
+    // apply settings (user intends to change current working values)
+    const sb = parseFloat(document.getElementById('s_balance').value) || state.balance;
+    const bu = parseFloat(document.getElementById('s_baseUnit').value) || state.baseUnit;
+    const rr = parseFloat(document.getElementById('s_rr').value) || state.rr;
+    const mr = parseFloat(document.getElementById('s_maxRiskPct').value) || state.maxRiskPct;
+    const seqText = document.getElementById('s_sequence').value || state.sequence.join(',');
+    const seqVals = seqText.split(',').map(x=>parseInt(x.trim())).filter(n=>!isNaN(n)&&n>0);
+    
+    // Compounding settings
+    const ct = parseFloat(document.getElementById('s_compoundingThreshold').value) || defaults.compoundingThreshold;
+    const cs = parseFloat(document.getElementById('s_compoundingStep').value) || defaults.compoundingStep;
+    
+    // Undo settings
+    const maxUndo = parseInt(document.getElementById('s_maxUndoHistory').value) || defaults.maxUndoHistory;
+    
+    state.balance = +sb.toFixed(4);
+    state.baseUnit = +bu.toFixed(4);
+    state.rr = +rr;
+    state.maxRiskPct = +mr;
+    state.sequence = seqVals.length ? seqVals : JSON.parse(JSON.stringify(defaults.sequence));
+    
+    // Update compounding settings
+    state.compoundingThreshold = +ct;
+    state.compoundingStep = +cs;
+    state.originalBaseUnit = state.baseUnit; // Reset original when user changes base unit
+    state.lastCompoundingBalance = state.balance; // Reset compounding tracking
+    
+    // Update undo settings
+    state.maxUndoHistory = maxUndo;
+    
+    // reset counters when user updates settings
+    state.totalLoss = 0; state.tradeCount = 0; state.history = [];
+    state.message = 'Settings saved.';
+    settingsModal.classList.add('hidden'); settingsModal.classList.remove('flex');
+    updateUI();
+  });
+
+  // Full reset (clear all localStorage and reload)
+  document.getElementById('fullResetBtn').addEventListener('click', () => {
+    if(confirm('⚠️ Are you sure you want to reset the entire app? This will delete all saved history and settings.')) {
+      localStorage.removeItem(LS_KEY);
+      localStorage.removeItem(LS_UNDO_HISTORY);
+      location.reload();
+    }
+  });
+
+  // History modal handlers
+  const historyModal = document.getElementById('historyModal');
+  document.getElementById('historyBtn').addEventListener('click', () => {
+    renderHistoryTable();
+    historyModal.classList.remove('hidden'); historyModal.classList.add('flex');
+  });
+  document.getElementById('closeHistory').addEventListener('click', () => { historyModal.classList.add('hidden'); historyModal.classList.remove('flex'); });
+  document.getElementById('clearHistory').addEventListener('click', () => {
+    if(confirm('Clear all trade history?')){ state.history = []; saveState(); renderHistoryTable(); }
+  });
+
+  // Render history table
+  function renderHistoryTable(){
+    const el = document.getElementById('historyTable');
+    if(!state.history.length){ el.innerHTML = '<div class="muted">No trade history yet.</div>'; return; }
+    const rows = state.history.map((h,i) => {
+      if (h.type === 'COMPOUNDING') {
+        return `<div class="border-b py-2">
+          <div class="mono text-sm text-blue-700">${h.type}</div>
+          <div class="text-xs text-blue-600">${h.info} • Bal: $${h.balance} • ${new Date(h.timestamp).toLocaleString()}</div>
+        </div>`;
+      } else if (h.type === 'SEQUENCE_RESTART') {
+        return `<div class="border-b py-2">
+          <div class="mono text-sm text-green-700">${h.type}</div>
+          <div class="text-xs text-green-600">${h.info} • ${new Date().toLocaleString()}</div>
+        </div>`;
+      } else {
+        return `<div class="border-b py-2">
+          <div class="mono text-sm">${h.type}</div>
+          <div class="text-xs muted">Risk: $${h.risk} • Reward: ${h.reward !== '-' ? '$'+h.reward : '-'} • Bal: $${h.balance} • Seq: ${h.seq} • ${new Date(h.timestamp).toLocaleString()}</div>
+        </div>`;
+      }
+    }).join('');
+    el.innerHTML = rows;
+  }
+
+  // initial UI build
+  updateUI();
+  updateUndoUI();
+</script>
+
+</body>
+</html>
